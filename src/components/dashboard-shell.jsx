@@ -4,6 +4,7 @@ import * as React from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { TopHeader } from "@/components/top-navbar"
+import Image from "next/image"
 
 import {
   LayoutDashboard,
@@ -57,20 +58,24 @@ export function DashboardShell({ children }) {
 
           <Link href="/dashboard" className="flex items-center gap-3">
 
-            <div className="flex size-8 items-center justify-center rounded-lg bg-sidebar-primary">
-
-              <Shield className="size-4 text-sidebar-primary-foreground" />
-
-            </div>
+            <div className="flex items-center justify-center">
+  <Image
+    src="/logo.png"
+    alt="Urban Pulse Logo"
+    width={32}
+    height={32}
+    className="rounded-md"
+  />
+</div>
 
             <div className="flex flex-col group-data-[collapsible=icon]:hidden">
 
               <span className="text-sm font-semibold">
-                Smart City AI
+                Urban Pulse
               </span>
 
               <span className="text-xs opacity-60">
-                Command Center
+               
               </span>
 
             </div>
