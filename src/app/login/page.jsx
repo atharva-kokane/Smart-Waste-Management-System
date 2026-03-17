@@ -75,6 +75,7 @@ export default function LoginPage() {
           >
             {loading ? "Logging in..." : "Login"}
           </button>
+          <h3>Email: admin@smartcity.com Password:admin123</h3>
 
         </form>
 
