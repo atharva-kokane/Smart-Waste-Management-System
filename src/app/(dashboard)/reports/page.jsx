@@ -124,7 +124,7 @@ export default function ReportsPage() {
 
       // ===== PDF =====
       doc.setFontSize(18)
-      doc.text("Smart City Combined Report", 20, 20)
+      doc.text("Daily Report", 20, 20)
 
       doc.setFontSize(12)
       doc.text(`Generated: ${date}`, 20, 35)
