@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
 
 ## Getting Started
@@ -46,3 +47,6 @@ npm install jspdf
 ```bash
 npm install groq-sdk
 ```
+=======
+# Smart-Waste-Management-System
+>>>>>>> 1bc9ea3ffbb3400dfbcdecf45746dae6d025151a

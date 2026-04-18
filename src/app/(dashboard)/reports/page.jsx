@@ -40,7 +40,6 @@ export default function ReportsPage() {
   const [generating, setGenerating] = useState(false)
 
 
-
   useEffect(() => {
 
     fetchReports()
@@ -63,227 +62,140 @@ export default function ReportsPage() {
   }, [])
 
 
-
   async function fetchReports() {
 
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("reports")
       .select("*")
       .order("created_at", { ascending: false })
 
-    if (data) setReports(data)
+    if (!error && data) setReports(data)
 
     setLoading(false)
-
   }
 
 
 
-  // =====================
-  // WASTE REPORT
-  // =====================
-
-  async function generateWasteReport() {
+  // ✅ UPDATED GENERATE FUNCTION
+  async function generateReport() {
 
     setGenerating(true)
 
     try {
 
       const doc = new jsPDF()
-
       const date = new Date().toLocaleString()
 
-      const { data: bins } = await supabase
+      // ===== WASTE DATA =====
+      const { data: bins, error: binError } = await supabase
         .from("smart_bins")
         .select("*")
 
+      if (binError || !bins) throw new Error("Failed to fetch bins")
+
       const total = bins.length
+      const critical = bins.filter(b => b.status === "Critical").length
+      const full = bins.filter(b => b.status === "Full" || b.status === "Critical").length
+      const empty = bins.filter(b => b.status === "Empty").length
 
-      const critical =
-        bins.filter(b => b.status === "Critical").length
+      // ✅ NEW CALCULATIONS
+      const avgTemp =
+        bins.reduce((sum, b) => sum + (b.temperature || 0), 0) / bins.length
 
-      const full =
-        bins.filter(b =>
-          b.status === "Full" ||
-          b.status === "Critical"
-        ).length
+      const avgGas =
+        bins.reduce((sum, b) => sum + (b.gas_level || 0), 0) / bins.length
 
-      const empty =
-        bins.filter(b => b.status === "Empty").length
+      const avgWeight =
+        bins.reduce((sum, b) => sum + (b.weight || 0), 0) / bins.length
 
 
+      // ===== AIR DATA =====
+      const { data: airData, error: airError } = await supabase
+        .from("air_quality")
+        .select("*")
+        .order("updated_at", { ascending: false })
+        .limit(1)
+
+      if (airError || !airData || airData.length === 0) {
+        throw new Error("No air data found")
+      }
+
+      const air = airData[0]
+
+      // ===== PDF =====
       doc.setFontSize(18)
-      doc.text("Smart City Waste Report", 20, 20)
+      doc.text("Smart City Combined Report", 20, 20)
 
       doc.setFontSize(12)
-      doc.text(`Generated: ${date}`, 20, 40)
+      doc.text(`Generated: ${date}`, 20, 35)
 
+      // Waste Section
+      doc.text("Waste Data:", 20, 50)
       doc.text(`Total Bins: ${total}`, 20, 60)
-      doc.text(`Critical Bins: ${critical}`, 20, 70)
-      doc.text(`Full Bins: ${full}`, 20, 80)
-      doc.text(`Empty Bins: ${empty}`, 20, 90)
+      doc.text(`Critical: ${critical}`, 20, 70)
+      doc.text(`Full: ${full}`, 20, 80)
+      doc.text(`Empty: ${empty}`, 20, 90)
 
+      doc.text(`Avg Temperature: ${avgTemp.toFixed(2)} °C`, 20, 100)
+      doc.text(`Avg Gas Level: ${avgGas.toFixed(2)}`, 20, 110)
+      doc.text(`Avg Weight: ${avgWeight.toFixed(2)} kg`, 20, 120)
 
+      // Air Section (shifted down)
+      doc.text("Air Quality Data:", 20, 140)
+      doc.text(`AQI: ${air.aqi}`, 20, 150)
+      doc.text(`PM2.5: ${air.pm25}`, 20, 160)
+      doc.text(`PM10: ${air.pm10}`, 20, 170)
+      doc.text(`CO: ${air.co}`, 20, 180)
+      doc.text(`NO2: ${air.no2}`, 20, 190)
+      doc.text(`SO2: ${air.so2}`, 20, 200)
+
+      // ===== UPLOAD =====
       const blob = doc.output("blob")
+      const fileName = `combined-report-${Date.now()}.pdf`
 
-      const fileName =
-        `waste-report-${Date.now()}.pdf`
-
-
-      // upload
-      const { error } =
-        await supabase.storage
-          .from("reports")
-          .upload(fileName, blob, {
-            contentType: "application/pdf",
-            upsert: true
-          })
-
-      if (error) throw error
-
-
-      // get public URL
-      const { data } =
-        supabase.storage
-          .from("reports")
-          .getPublicUrl(fileName)
-
-
-      const fileUrl = data.publicUrl
-
-
-      // save to DB
-      await supabase
+      const { error: uploadError } = await supabase.storage
         .from("reports")
-        .insert({
-
-          report_name: "Waste Report",
-
-          report_type: "Waste",
-
-          status: "Generated",
-
-          file_url: fileUrl
-
+        .upload(fileName, blob, {
+          contentType: "application/pdf",
+          upsert: true
         })
 
-    }
-    catch (err) {
+      if (uploadError) throw uploadError
 
-      console.error(err)
-
-      alert("Waste report failed")
-
-    }
-
-    setGenerating(false)
-
-  }
-
-
-
-  // =====================
-  // AIR REPORT
-  // =====================
-
-  async function generateAirReport() {
-
-    setGenerating(true)
-
-    try {
-
-      const doc = new jsPDF()
-
-      const date = new Date().toLocaleString()
-
-      const { data } =
-        await supabase
-          .from("air_quality")
-          .select("*")
-          .order("updated_at", { ascending: false })
-          .limit(1)
-
-      const air = data[0]
-
-
-      doc.setFontSize(18)
-      doc.text("Smart City Air Quality Report", 20, 20)
-
-      doc.setFontSize(12)
-      doc.text(`Generated: ${date}`, 20, 40)
-
-      doc.text(`AQI: ${air.aqi}`, 20, 60)
-      doc.text(`PM2.5: ${air.pm25}`, 20, 70)
-      doc.text(`PM10: ${air.pm10}`, 20, 80)
-      doc.text(`CO: ${air.co}`, 20, 90)
-      doc.text(`NO2: ${air.no2}`, 20, 100)
-      doc.text(`SO2: ${air.so2}`, 20, 110)
-
-
-      const blob = doc.output("blob")
-
-      const fileName =
-        `air-report-${Date.now()}.pdf`
-
-
-      const { error } =
-        await supabase.storage
-          .from("reports")
-          .upload(fileName, blob, {
-            contentType: "application/pdf",
-            upsert: true
-          })
-
-      if (error) throw error
-
-
-      const { data: urlData } =
-        supabase.storage
-          .from("reports")
-          .getPublicUrl(fileName)
-
+      const { data: urlData } = supabase.storage
+        .from("reports")
+        .getPublicUrl(fileName)
 
       const fileUrl = urlData.publicUrl
 
-
-      await supabase
+      // ===== SAVE TO DB =====
+      const { error: insertError } = await supabase
         .from("reports")
         .insert({
-
-          report_name: "Air Quality Report",
-
-          report_type: "Pollution",
-
+          report_name: "City Report",
           status: "Generated",
-
           file_url: fileUrl
-
         })
+
+      if (insertError) throw insertError
 
     }
     catch (err) {
-
       console.error(err)
-
-      alert("Air report failed")
-
+      alert(err.message || "Report generation failed")
     }
 
     setGenerating(false)
-
   }
 
 
 
   function downloadReport(url) {
-
     if (!url) {
       alert("File not available")
       return
     }
-
     window.open(url, "_blank")
-
   }
 
 
@@ -300,12 +212,11 @@ export default function ReportsPage() {
             Reports
           </CardTitle>
 
-
           <div className="flex gap-2">
 
             <Button
               size="sm"
-              onClick={generateWasteReport}
+              onClick={generateReport}
               disabled={generating}
             >
 
@@ -314,18 +225,7 @@ export default function ReportsPage() {
                 : <FileText className="size-4"/>
               }
 
-              Waste Report
-
-            </Button>
-
-
-            <Button
-              size="sm"
-              onClick={generateAirReport}
-              disabled={generating}
-            >
-
-              Air Report
+              Generate Report
 
             </Button>
 
@@ -348,13 +248,8 @@ export default function ReportsPage() {
                   <TableRow>
 
                     <TableHead>Name</TableHead>
-
-                    <TableHead>Type</TableHead>
-
                     <TableHead>Date</TableHead>
-
                     <TableHead>Status</TableHead>
-
                     <TableHead>Download</TableHead>
 
                   </TableRow>
@@ -374,15 +269,7 @@ export default function ReportsPage() {
                       </TableCell>
 
                       <TableCell>
-                        <Badge>
-                          {report.report_type}
-                        </Badge>
-                      </TableCell>
-
-                      <TableCell>
-                        {new Date(
-                          report.created_at
-                        ).toLocaleString()}
+                        {new Date(report.created_at).toLocaleString()}
                       </TableCell>
 
                       <TableCell>
@@ -425,5 +312,4 @@ export default function ReportsPage() {
     </div>
 
   )
-
 }
