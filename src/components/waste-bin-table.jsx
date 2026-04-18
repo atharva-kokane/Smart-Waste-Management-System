@@ -1,5 +1,8 @@
 "use client"
 
+import { useEffect, useState } from "react"
+import { supabase } from "@/lib/supabaseClient"
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   Table,
@@ -12,16 +15,15 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Eye } from "lucide-react"
-import { useEffect, useState } from "react"
-import { supabase } from "@/lib/supabaseClient"
 
-// ✅ Dialog (shadcn)
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+
+
 
 function StatusBadge({ status }) {
   const styles = {
@@ -37,11 +39,11 @@ function StatusBadge({ status }) {
   )
 }
 
+
+
 export function WasteBinTable() {
 
   const [bins, setBins] = useState([])
-
-  // ✅ dialog state
   const [open, setOpen] = useState(false)
   const [selectedBin, setSelectedBin] = useState(null)
 
@@ -62,11 +64,11 @@ export function WasteBinTable() {
       )
       .subscribe()
 
-    return () => {
-      supabase.removeChannel(channel)
-    }
+    return () => supabase.removeChannel(channel)
 
   }, [])
+
+
 
   async function fetchBins() {
     const { data } = await supabase
@@ -74,14 +76,27 @@ export function WasteBinTable() {
       .select("*")
       .order("bin_id")
 
-    if (data) setBins(data)
+    if (data) {
+      setBins(data)
+
+      // ✅ IMPORTANT FIX → update modal data also
+      if (selectedBin) {
+        const updated = data.find(b => b.bin_id === selectedBin.bin_id)
+        if (updated) {
+          setSelectedBin(updated)
+        }
+      }
+    }
   }
 
-  // ✅ handle view click
+
+
   function handleView(bin) {
     setSelectedBin(bin)
     setOpen(true)
   }
+
+
 
   return (
     <>
@@ -142,7 +157,9 @@ export function WasteBinTable() {
         </CardContent>
       </Card>
 
-      {/* ✅ MODAL */}
+
+
+      {/* MODAL */}
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-2xl">
 
@@ -152,39 +169,39 @@ export function WasteBinTable() {
             </DialogTitle>
           </DialogHeader>
 
-          {/* 🎥 ESP32 Camera Stream */}
+          {/* CAMERA */}
           <div className="w-full h-[300px] bg-black rounded overflow-hidden">
             {selectedBin && (
               <img
-                src={`http://YOUR_ESP32_IP/stream`}   // 🔥 replace with your ESP32 IP
+                src={`http://YOUR_ESP32_IP/stream`}
                 alt="camera"
                 className="w-full h-full object-cover"
               />
             )}
           </div>
 
-          {/* 📊 Sensor Data */}
+          {/* LIVE SENSOR DATA */}
           {selectedBin && (
             <div className="grid grid-cols-3 gap-4 mt-4 text-center">
 
               <div className="p-3 rounded bg-muted">
-                <p className="text-xs text-muted-foreground">Gas Level</p>
+                <p className="text-xs">Gas Level</p>
                 <p className="text-lg font-semibold">
-                  {selectedBin.gas_level ?? "N/A"}
+                  {selectedBin.gas_level}
                 </p>
               </div>
 
               <div className="p-3 rounded bg-muted">
-                <p className="text-xs text-muted-foreground">Temperature</p>
+                <p className="text-xs">Temperature</p>
                 <p className="text-lg font-semibold">
-                  {selectedBin.temperature ?? "N/A"} °C
+                  {selectedBin.temperature} °C
                 </p>
               </div>
 
               <div className="p-3 rounded bg-muted">
-                <p className="text-xs text-muted-foreground">Weight</p>
+                <p className="text-xs">Weight</p>
                 <p className="text-lg font-semibold">
-                  {selectedBin.weight ?? "N/A"}
+                  {selectedBin.weight}
                 </p>
               </div>
 

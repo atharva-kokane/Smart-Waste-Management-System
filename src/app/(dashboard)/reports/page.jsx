@@ -17,7 +17,6 @@ import {
 } from "@/components/ui/card"
 
 import { Badge } from "@/components/ui/badge"
-
 import { Button } from "@/components/ui/button"
 
 import {
@@ -41,9 +40,9 @@ export default function ReportsPage() {
 
 
   useEffect(() => {
-
     fetchReports()
 
+    // realtime (optional backup)
     const channel = supabase
       .channel("reports-live")
       .on(
@@ -62,6 +61,7 @@ export default function ReportsPage() {
   }, [])
 
 
+
   async function fetchReports() {
 
     const { data, error } = await supabase
@@ -76,7 +76,7 @@ export default function ReportsPage() {
 
 
 
-  // ✅ UPDATED GENERATE FUNCTION
+  // ✅ FIXED GENERATE FUNCTION (INSTANT UPDATE)
   async function generateReport() {
 
     setGenerating(true)
@@ -86,81 +86,57 @@ export default function ReportsPage() {
       const doc = new jsPDF()
       const date = new Date().toLocaleString()
 
-      // ===== WASTE DATA =====
-      const { data: bins, error: binError } = await supabase
+      // ===== FETCH BIN DATA =====
+      const { data: bins } = await supabase
         .from("smart_bins")
         .select("*")
-
-      if (binError || !bins) throw new Error("Failed to fetch bins")
 
       const total = bins.length
       const critical = bins.filter(b => b.status === "Critical").length
       const full = bins.filter(b => b.status === "Full" || b.status === "Critical").length
       const empty = bins.filter(b => b.status === "Empty").length
 
-      // ✅ NEW CALCULATIONS
-      const avgTemp =
-        bins.reduce((sum, b) => sum + (b.temperature || 0), 0) / bins.length
+      const avgTemp = bins.reduce((s, b) => s + (b.temperature || 0), 0) / bins.length
+      const avgGas = bins.reduce((s, b) => s + (b.gas_level || 0), 0) / bins.length
+      const avgWeight = bins.reduce((s, b) => s + (b.weight || 0), 0) / bins.length
 
-      const avgGas =
-        bins.reduce((sum, b) => sum + (b.gas_level || 0), 0) / bins.length
-
-      const avgWeight =
-        bins.reduce((sum, b) => sum + (b.weight || 0), 0) / bins.length
-
-
-      // ===== AIR DATA =====
-      const { data: airData, error: airError } = await supabase
+      // ===== FETCH AIR DATA =====
+      const { data: airData } = await supabase
         .from("air_quality")
         .select("*")
         .order("updated_at", { ascending: false })
         .limit(1)
 
-      if (airError || !airData || airData.length === 0) {
-        throw new Error("No air data found")
-      }
-
       const air = airData[0]
 
-      // ===== PDF =====
-      doc.setFontSize(18)
-      doc.text("Daily Report", 20, 20)
+      // ===== PDF CONTENT =====
+      doc.setFontSize(16)
+      doc.text("City Report", 20, 20)
 
       doc.setFontSize(12)
-      doc.text(`Generated: ${date}`, 20, 35)
+      doc.text(`Generated: ${date}`, 20, 30)
 
-      // Waste Section
-      doc.text("Waste Data:", 20, 50)
-      doc.text(`Total Bins: ${total}`, 20, 60)
-      doc.text(`Critical: ${critical}`, 20, 70)
-      doc.text(`Full: ${full}`, 20, 80)
-      doc.text(`Empty: ${empty}`, 20, 90)
+      doc.text(`Total Bins: ${total}`, 20, 50)
+      doc.text(`Critical: ${critical}`, 20, 60)
+      doc.text(`Full: ${full}`, 20, 70)
+      doc.text(`Empty: ${empty}`, 20, 80)
 
-      doc.text(`Avg Temperature: ${avgTemp.toFixed(2)} °C`, 20, 100)
-      doc.text(`Avg Gas Level: ${avgGas.toFixed(2)}`, 20, 110)
-      doc.text(`Avg Weight: ${avgWeight.toFixed(2)} kg`, 20, 120)
+      doc.text(`Avg Temp: ${avgTemp.toFixed(2)} °C`, 20, 90)
+      doc.text(`Avg Gas: ${avgGas.toFixed(2)}`, 20, 100)
+      doc.text(`Avg Weight: ${avgWeight.toFixed(2)} kg`, 20, 110)
 
-      // Air Section (shifted down)
-      doc.text("Air Quality Data:", 20, 140)
-      doc.text(`AQI: ${air.aqi}`, 20, 150)
-      doc.text(`PM2.5: ${air.pm25}`, 20, 160)
-      doc.text(`PM10: ${air.pm10}`, 20, 170)
-      doc.text(`CO: ${air.co}`, 20, 180)
-      doc.text(`NO2: ${air.no2}`, 20, 190)
-      doc.text(`SO2: ${air.so2}`, 20, 200)
+      doc.text(`AQI: ${air.aqi}`, 20, 130)
 
-      // ===== UPLOAD =====
+      // ===== UPLOAD PDF =====
       const blob = doc.output("blob")
-      const fileName = `combined-report-${Date.now()}.pdf`
+      const fileName = `report-${Date.now()}.pdf`
 
-      const { error: uploadError } = await supabase.storage
+      await supabase.storage
         .from("reports")
         .upload(fileName, blob, {
           contentType: "application/pdf",
           upsert: true
         })
-
-      if (uploadError) throw uploadError
 
       const { data: urlData } = supabase.storage
         .from("reports")
@@ -168,21 +144,24 @@ export default function ReportsPage() {
 
       const fileUrl = urlData.publicUrl
 
-      // ===== SAVE TO DB =====
-      const { error: insertError } = await supabase
+      // ===== INSERT INTO DB =====
+      const { data: inserted } = await supabase
         .from("reports")
         .insert({
           report_name: "City Report",
           status: "Generated",
           file_url: fileUrl
         })
+        .select()
 
-      if (insertError) throw insertError
+      // ✅ INSTANT UI UPDATE (NO REFRESH)
+      if (inserted && inserted.length > 0) {
+        setReports(prev => [inserted[0], ...prev])
+      }
 
-    }
-    catch (err) {
+    } catch (err) {
       console.error(err)
-      alert(err.message || "Report generation failed")
+      alert("Report generation failed")
     }
 
     setGenerating(false)
@@ -212,24 +191,20 @@ export default function ReportsPage() {
             Reports
           </CardTitle>
 
-          <div className="flex gap-2">
+          <Button
+            size="sm"
+            onClick={generateReport}
+            disabled={generating}
+          >
 
-            <Button
-              size="sm"
-              onClick={generateReport}
-              disabled={generating}
-            >
+            {generating
+              ? <Loader2 className="size-4 animate-spin"/>
+              : <FileText className="size-4"/>
+            }
 
-              {generating
-                ? <Loader2 className="size-4 animate-spin"/>
-                : <FileText className="size-4"/>
-              }
+            Generate Report
 
-              Generate Report
-
-            </Button>
-
-          </div>
+          </Button>
 
         </CardHeader>
 
@@ -260,43 +235,51 @@ export default function ReportsPage() {
 
                 <TableBody>
 
-                  {reports.map(report => (
-
-                    <TableRow key={report.id}>
-
-                      <TableCell>
-                        {report.report_name}
+                  {reports.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={4} className="text-center">
+                        No Reports
                       </TableCell>
-
-                      <TableCell>
-                        {new Date(report.created_at).toLocaleString()}
-                      </TableCell>
-
-                      <TableCell>
-                        <Badge className="bg-green-600 text-white">
-                          {report.status}
-                        </Badge>
-                      </TableCell>
-
-                      <TableCell>
-
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() =>
-                            downloadReport(report.file_url)
-                          }
-                        >
-
-                          <Download className="size-4"/>
-
-                        </Button>
-
-                      </TableCell>
-
                     </TableRow>
+                  ) : (
 
-                  ))}
+                    reports.map(report => (
+
+                      <TableRow key={report.id}>
+
+                        <TableCell>
+                          {report.report_name}
+                        </TableCell>
+
+                        <TableCell>
+                          {new Date(report.created_at).toLocaleString()}
+                        </TableCell>
+
+                        <TableCell>
+                          <Badge className="bg-green-600 text-white">
+                            {report.status}
+                          </Badge>
+                        </TableCell>
+
+                        <TableCell>
+
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() =>
+                              downloadReport(report.file_url)
+                            }
+                          >
+                            <Download className="size-4"/>
+                          </Button>
+
+                        </TableCell>
+
+                      </TableRow>
+
+                    ))
+
+                  )}
 
                 </TableBody>
 
@@ -310,6 +293,5 @@ export default function ReportsPage() {
       </Card>
 
     </div>
-
   )
 }
